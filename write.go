@@ -9,12 +9,12 @@ import (
 	"io"
 	"slices"
 
-	"github.com/suyashkumar/dicom/pkg/vrraw"
+	"github.com/WSILabs/dicom/pkg/vrraw"
 
-	"github.com/suyashkumar/dicom/pkg/uid"
+	"github.com/WSILabs/dicom/pkg/uid"
 
-	"github.com/suyashkumar/dicom/pkg/dicomio"
-	"github.com/suyashkumar/dicom/pkg/tag"
+	"github.com/WSILabs/dicom/pkg/dicomio"
+	"github.com/WSILabs/dicom/pkg/tag"
 )
 
 var (
@@ -27,7 +27,7 @@ var (
 	// ErrorUnsupportedBitsPerSample indicates that the BitsPerSample in this
 	// Dataset is not supported when unpacking native PixelData.
 	ErrorUnsupportedBitsPerSample          = errors.New("unsupported BitsPerSample value")
-	errorDeflatedTransferSyntaxUnsupported = errors.New("deflated explicit vr little endian transfer syntax not yet support on write (https://github.com/suyashkumar/dicom/issues/323)")
+	errorDeflatedTransferSyntaxUnsupported = errors.New("deflated explicit vr little endian transfer syntax not yet support on write (https://github.com/WSILabs/dicom/issues/323)")
 )
 
 // Writer is a struct that allows element-by element writing to a DICOM writer.

@@ -1,0 +1,108 @@
+name: wsilabs-sync-upstream
+
+# Keeps this fork's patches (HTJ2K / JPEG XL transfer-syntax UIDs, see
+# pkg/uid/uid_definitions.go "WSILabs fork additions") current with
+# suyashkumar/dicom. Runs weekly: if upstream advanced, it merges upstream/main
+# into a sync branch, builds + tests, and opens a PR for review. The fork's diff
+# is append-only dictionary entries, so merges are normally conflict-free; a
+# conflict or test failure fails the run (and opens a tracking issue) for a human.
+#
+# It also reports whether upstream has finally shipped the HTJ2K UIDs (PR #377)
+# so the fork can be retired and the go.mod replace dropped.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC (upstream moves ~quarterly)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      UPSTREAM: https://github.com/suyashkumar/dicom.git
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "wsilabs-sync-bot"
+          git config user.email "noreply@wsilabs.invalid"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "$UPSTREAM" 2>/dev/null || git remote set-url upstream "$UPSTREAM"
+          git fetch --no-tags upstream main
+
+      - name: Detect upstream movement
+        id: check
+        run: |
+          behind=$(git rev-list --count HEAD..upstream/main)
+          echo "behind=$behind" >> "$GITHUB_OUTPUT"
+          echo "Upstream main is $behind commit(s) ahead of our default branch."
+
+      - name: Report if upstream shipped HTJ2K (fork may be retireable)
+        if: steps.check.outputs.behind != '0'
+        run: |
+          if git show upstream/main:pkg/uid/uid_definitions.go | grep -q "1.2.840.10008.1.2.4.201"; then
+            echo "::notice::Upstream now defines the HTJ2K UIDs — consider retiring the WSILabs fork and dropping the go.mod replace."
+          fi
+
+      - name: Prepare sync branch
+        if: steps.check.outputs.behind != '0'
+        id: merge
+        run: |
+          branch="sync/upstream-$(git rev-parse --short upstream/main)"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          git checkout -B "$branch"
+          if git merge --no-edit upstream/main; then
+            echo "merged=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+            git merge --abort || true
+          fi
+
+      - name: Re-apply fork rebrand (new upstream files → fork module path)
+        if: steps.merge.outputs.merged == 'true'
+        run: |
+          ./scripts/wsilabs-rebrand.sh
+          if ! git diff --quiet; then
+            git commit -am "chore: re-apply WSILabs module rebrand after upstream merge"
+          fi
+
+      - uses: actions/setup-go@v5
+        if: steps.merge.outputs.merged == 'true'
+        with:
+          go-version-file: go.mod
+
+      - name: Build + test merged result
+        if: steps.merge.outputs.merged == 'true'
+        id: verify
+        run: |
+          go build ./... && go test ./... && echo "passed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Open sync PR
+        if: steps.verify.outputs.passed == 'true'
+        run: |
+          git push -f origin "${{ steps.merge.outputs.branch }}"
+          gh pr create \
+            --base "${{ github.event.repository.default_branch }}" \
+            --head "${{ steps.merge.outputs.branch }}" \
+            --title "Sync upstream suyashkumar/dicom (${{ steps.merge.outputs.branch }})" \
+            --body "Automated weekly sync. Upstream advanced; merge is clean and \`go build ./... && go test ./...\` passes. Review, then merge and cut a new \`vX.Y.Z-wsilabs.N\` tag so consumers (wsitools \`go.mod replace\`) can bump." \
+            || echo "PR may already exist for this branch."
+
+      - name: Open tracking issue on conflict / test failure
+        if: steps.check.outputs.behind != '0' && (steps.merge.outputs.merged != 'true' || steps.verify.outputs.passed != 'true')
+        run: |
+          gh issue create \
+            --title "Upstream sync needs manual attention ($(git rev-parse --short upstream/main))" \
+            --body "The weekly upstream sync could not auto-merge or failed build/test. Resolve the merge of \`upstream/main\` into the default branch by hand, re-apply the WSILabs fork additions if needed, and cut a new \`-wsilabs.N\` tag." \
+            || echo "Issue may already exist."

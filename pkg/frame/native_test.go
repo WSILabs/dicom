@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/suyashkumar/dicom/pkg/frame"
+	"github.com/WSILabs/dicom/pkg/frame"
 )
 
 // point represents a 2D point for testing.
