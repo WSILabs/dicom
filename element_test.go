@@ -11,6 +11,51 @@ import (
 	"github.com/WSILabs/dicom/pkg/tag"
 )
 
+// TestNewElement_PixelDataVR verifies native PixelData's VR is chosen by bit
+// depth: <=8-bit -> OB, >8-bit -> OW (encapsulated stays OW; see pixelDataVR).
+// An 8-bit native buffer mislabeled OW is read as 16-bit words (RGB collapses
+// to grayscale), so this guards a silent-corruption regression.
+func TestNewElement_PixelDataVR(t *testing.T) {
+	cases := []struct {
+		name string
+		data PixelDataInfo
+		want string
+	}{
+		{
+			name: "native 8-bit -> OB",
+			data: PixelDataInfo{IsEncapsulated: false, Frames: []*frame.Frame{{
+				NativeData: &frame.NativeFrame[uint8]{RawData: []uint8{0, 0, 0}, InternalRows: 1, InternalCols: 1, InternalSamplesPerPixel: 3, InternalBitsPerSample: 8},
+			}}},
+			want: "OB",
+		},
+		{
+			name: "native 16-bit -> OW",
+			data: PixelDataInfo{IsEncapsulated: false, Frames: []*frame.Frame{{
+				NativeData: &frame.NativeFrame[uint16]{RawData: []uint16{0}, InternalRows: 1, InternalCols: 1, InternalSamplesPerPixel: 1, InternalBitsPerSample: 16},
+			}}},
+			want: "OW",
+		},
+		{
+			name: "encapsulated -> OW (reader round-trip; see pixelDataVR)",
+			data: PixelDataInfo{IsEncapsulated: true, Frames: []*frame.Frame{{
+				Encapsulated: true,
+			}}},
+			want: "OW",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			el, err := NewElement(tag.PixelData, c.data)
+			if err != nil {
+				t.Fatalf("NewElement: %v", err)
+			}
+			if el.RawValueRepresentation != c.want {
+				t.Errorf("PixelData VR = %q, want %q", el.RawValueRepresentation, c.want)
+			}
+		})
+	}
+}
+
 func TestElement_MarshalJSON_NestedElements(t *testing.T) {
 	nestedData := [][]*Element{
 		{

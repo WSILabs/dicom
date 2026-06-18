@@ -26,6 +26,18 @@ import (
 //
 // This also serves to test that the Parse implementation is consistent with the
 // Write implementation (e.g. it kinda goes both ways and covers Parse too).
+// implicitNativePixelData builds a native PixelData element with VR forced to
+// OW, for use in Implicit VR Little Endian round-trip fixtures. Under Implicit
+// VR the VR is not stored in the file and PixelData is read back as OW per
+// PS3.5 §8.1.2 regardless of bit depth — so the fixture must expect OW even for
+// 8-bit data, whereas NewElement picks the explicit-VR-correct OB for <=8-bit.
+func implicitNativePixelData(pdi PixelDataInfo) *Element {
+	e := mustNewElement(tag.PixelData, pdi)
+	e.RawValueRepresentation = "OW"
+	e.ValueRepresentation = tag.GetVRKind(tag.PixelData, "OW")
+	return e
+}
+
 func TestWrite(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -283,7 +295,7 @@ func TestWrite(t *testing.T) {
 				mustNewElement(tag.BitsAllocated, []int{8}),
 				mustNewElement(tag.NumberOfFrames, []string{"1"}),
 				mustNewElement(tag.SamplesPerPixel, []int{1}),
-				mustNewElement(tag.PixelData, PixelDataInfo{
+				implicitNativePixelData(PixelDataInfo{
 					IsEncapsulated: false,
 					Frames: []*frame.Frame{
 						{
@@ -502,7 +514,7 @@ func TestWrite(t *testing.T) {
 				mustNewElement(tag.BitsAllocated, []int{8}),
 				mustNewElement(tag.NumberOfFrames, []string{"1"}),
 				mustNewElement(tag.SamplesPerPixel, []int{1}),
-				mustNewElement(tag.PixelData, PixelDataInfo{
+				implicitNativePixelData(PixelDataInfo{
 					IsEncapsulated: false,
 					Frames: []*frame.Frame{
 						{

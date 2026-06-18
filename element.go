@@ -149,7 +149,7 @@ func NewElement(t tag.Tag, data any) (*Element, error) {
 	}
 	rawVR := tagInfo.VRs[0]
 	if t == tag.PixelData {
-		rawVR = "OW"
+		rawVR = pixelDataVR(data)
 	}
 	value, err := NewValue(data)
 	if err != nil {
@@ -162,6 +162,37 @@ func NewElement(t tag.Tag, data any) (*Element, error) {
 		RawValueRepresentation: rawVR,
 		Value:                  value,
 	}, nil
+}
+
+// pixelDataVR selects the Value Representation for native (uncompressed)
+// PixelData by bit depth, per the DICOM rules (PS3.5 §8.1.1, A.1): native
+// PixelData is OB when samples are <= 8 bits and OW otherwise. It inspects the
+// PixelDataInfo's frames for the native bit depth. (Previously this was an
+// unconditional OW, which made an 8-bit native buffer be read as 16-bit words —
+// collapsing RGB to grayscale — and forced consumers to override the VR by hand.)
+//
+// Encapsulated PixelData keeps OW here: although DICOM specifies OB for
+// encapsulated, this package's reader yields OW for it on read-back, and the
+// write/read round-trip depends on the two matching. Consumers that need the
+// encapsulated OB (with undefined length) build that element directly rather
+// than via NewElement, so this default doesn't constrain them.
+func pixelDataVR(data any) string {
+	pdi, ok := data.(PixelDataInfo)
+	if !ok || pdi.IsEncapsulated {
+		return "OW"
+	}
+	for _, f := range pdi.Frames {
+		if f == nil || f.NativeData == nil {
+			continue
+		}
+		if bps := f.NativeData.BitsPerSample(); bps > 0 {
+			if bps <= 8 {
+				return "OB"
+			}
+			return "OW"
+		}
+	}
+	return "OW"
 }
 
 func mustNewElement(t tag.Tag, data any) *Element {
