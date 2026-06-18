@@ -165,11 +165,12 @@ func NewElement(t tag.Tag, data any) (*Element, error) {
 }
 
 // pixelDataVR selects the Value Representation for native (uncompressed)
-// PixelData by bit depth, per the DICOM rules (PS3.5 §8.1.1, A.1): native
-// PixelData is OB when samples are <= 8 bits and OW otherwise. It inspects the
-// PixelDataInfo's frames for the native bit depth. (Previously this was an
-// unconditional OW, which made an 8-bit native buffer be read as 16-bit words —
-// collapsing RGB to grayscale — and forced consumers to override the VR by hand.)
+// PixelData by bit depth: OB when samples are <= 8 bits, OW otherwise. Both are
+// conformant for <=8-bit native in Explicit VR (PS3.5 §8.2: OB "may also be
+// used … only with Transfer Syntaxes where the VR is explicitly conveyed"); OB
+// is the conventional choice and what most writers emit. Previously this was an
+// unconditional OW, which (while valid) forced consumers wanting OB to override
+// the VR by hand. It inspects the PixelDataInfo's frames for the native bit depth.
 //
 // Encapsulated PixelData keeps OW here: although DICOM specifies OB for
 // encapsulated, this package's reader yields OW for it on read-back, and the

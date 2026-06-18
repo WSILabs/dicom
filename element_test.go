@@ -13,8 +13,8 @@ import (
 
 // TestNewElement_PixelDataVR verifies native PixelData's VR is chosen by bit
 // depth: <=8-bit -> OB, >8-bit -> OW (encapsulated stays OW; see pixelDataVR).
-// An 8-bit native buffer mislabeled OW is read as 16-bit words (RGB collapses
-// to grayscale), so this guards a silent-corruption regression.
+// OB is the conventional VR for <=8-bit native; OW is also conformant in
+// Explicit VR (PS3.5 §8.2), so this guards the convention, not corruption.
 func TestNewElement_PixelDataVR(t *testing.T) {
 	cases := []struct {
 		name string
